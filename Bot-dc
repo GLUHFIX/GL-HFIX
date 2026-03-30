@@ -3,7 +3,7 @@ import random
 import asyncio
 import gc
 
-TOKEN = "MTQ4NTU4NDUyNzQxMjY5NTA4MQ.GeuE5w.7tAlG3hzDy_pprzSqlBxkhZGk2LYI9e5QyXfUw"
+TOKEN = ""
 DC_INVITE_LINK = "https://discord.com/invite/PgpFCNPuSn"
 
 intents = discord.Intents.default()
